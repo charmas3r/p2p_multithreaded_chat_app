@@ -68,8 +68,8 @@ def message_router(message, connection):
             elif message.decode() == '3':
                 remove_connection(connection)
             else:
-                # add error message here
-                print("Error, invalid operation")
+                # error message
+                send_general_error(connection)
     elif user.state is UserState.Requesting:
         # current user in a state where they are requesting to chat with another user
         requested_user = get_user_from_name(message.decode())
@@ -87,10 +87,10 @@ def message_router(message, connection):
             # formally begin chatting
             user.state = UserState.Chatting
             request_user.state = UserState.Chatting
-            send_chat_header(user, connection)
-            send_chat_header(request_user, request_user.connection)
-            send_chat_prefix(user, connection)
-            send_chat_prefix(request_user, request_user.connection)
+            send_chat_header(request_user, user, connection)
+            send_chat_header(user, request_user, request_user.connection)
+            send_chat_signal_to_client(user, connection)
+            send_chat_signal_to_client(request_user, request_user.connection)
         elif message.decode().lower() == 'n':
             # send rejection message to user
             user.state = UserState.Idle
@@ -100,39 +100,66 @@ def message_router(message, connection):
             send_menu(connection)
         else:
             # error message
-            print("user error...")
+            send_general_error(connection)
     elif user.state is UserState.Chatting:
         temp_str_list = user.availability.split()
         other_user = get_user_from_name(temp_str_list[2])
         if message.decode() == "Quit":
+            user.state = UserState.Idle
+            other_user.state = UserState.Idle
+            user.availability = "Available"
+            other_user.availability = "Available"
             send_chat_end_to_users(user.connection, other_user.connection)
             send_menu(other_user.connection)
             send_menu(user.connection)
-            user.state = UserState.Idle
-            other_user.state = UserState.Idle
         else:
-            formatted_chat_message = other_user.username + ": " + message.decode() + "\n" + user.username + ": \n"
+            formatted_chat_message = "\n" + user.username + ": " + message.decode() + "\n"
             send_user_to_user_message(user, other_user, formatted_chat_message)
 
 
+def username_from_connection(connection):
+    if connection in database:
+        return database[connection].username
+
+
+def send_general_error(connection):
+    print("invalid input from " + username_from_connection(connection))
+    error_message = "\nInvalid input, try again\n"
+    connection.send(error_message.encode())
+
+
+def format_incoming_msg(message):
+    # strip off chat prefix
+    format_msg_list = message.split(':')
+    return format_msg_list[1]
+
 
 def send_chat_end_to_users(connection, other_connection):
+    print("Exiting chat for " + username_from_connection(connection))
+    send_chat_end_signal_client(connection)
+    send_chat_end_signal_client(other_connection)
     end_message = "chat session ended"
     connection.send(end_message.encode())
     other_connection.send(end_message.encode())
 
 
-def send_chat_prefix(user, connection):
-    prefix = user.username + ": "
-    connection.send(prefix.encode())
+def send_chat_signal_to_client(user, connection):
+    signal = "IN_CHAT:" + user.username
+    connection.send(signal.encode())
+
+
+def send_chat_end_signal_client(connection):
+    signal = "NOT_CHAT"
+    connection.send(signal.encode())
 
 
 def send_rejection_message(user, connection):
+    print("Sent chat rejection message to " + user.username)
     rejection_message = "\n " + user.username + " has denied the chat."
     connection.send(rejection_message.encode())
 
 
-def send_chat_header(user, connection):
+def send_chat_header(user, other_user, connection):
     header = '\n\n**** Private Chat with ' + user.username + " ****\n\n"
     connection.send(header.encode())
 
@@ -148,22 +175,26 @@ def send_menu(connection):
 
 
 def send_single_user_warning(connection):
+    print("Sent single user warning to " + username_from_connection(connection))
     warning = '\nYou are the only person in this server\n'
     connection.send(warning.encode())
 
 
 def send_request_waiting(user, connection):
+    print("Sent wait request to " + username_from_connection(connection))
     wait_message = '\nWaiting for ' + user.username + ' to accept your invitation. Please wait.\n'
     connection.send(wait_message.encode())
 
 
 def send_chat_request(connection):
+    print(username_from_connection(connection) + " is requesting a private chat")
     message = '\nEnter the name of the person you would like to chat with: '
     connection.send(message.encode())
 
 
 def send_user_list(connection):
     send_user_list_header(connection)
+    print(username_from_connection(connection) + " requested current user list. See below: ")
     for key, value in active_clients.items():
         user_list = ""
         if value in database:
@@ -172,6 +203,7 @@ def send_user_list(connection):
                 user_list += "\t" + temp_user.username + "\t\t" + str(temp_user.availability) \
                              + "\t" + str(temp_user.address) + "\t\t" + str(temp_user.login_status) + "\n"
                 connection.send(user_list.encode())
+                print(user_list)
 
 
 def get_user_from_name(username):
@@ -194,15 +226,16 @@ def send_user_to_user_message(current_user, requested_user, message):
 
 def username_validation(user, connection):
     if user.username == '':
+        print("Error: Validation not successful for " + user.username)
         response = "Error: Username cannot be empty. Please choose another: "
         connection.send(response.encode())
     else:
         if user.username in active_clients:
-            print("Error: Validation not successful")
+            print("Error: Validation not successful for " + user.username)
             response = "Error: Username already taken. Please choose another: "
             connection.send(response.encode())
         else:
-            print("Success, validated username")
+            print("Success, validated username for " + user.username)
             active_clients[user.username] = connection
             user.login_status = True
             user.availability = "Available"
@@ -216,31 +249,29 @@ def remove_connection(connection):
         if value in database:
             temp_user = database[value]
             if connection in database:
-                print("deleting...")
                 del database[connection]
                 del active_clients[temp_user.username]
+                print("deleted " + temp_user.username + "'s records from server")
                 message = "FORCE_EXIT"
                 connection.send(message.encode())
                 connection.close()
 
 
-def Main():
+def main():
     host = "0.0.0.0"
     port = 12000
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((host, port))
-    print("socket binded to port", port)
     s.listen(100)
-    print("socket is listening")
-
-    # a forever loop until client wants to exit
+    print("Server initialization is complete. Chat server listening for connections.")
     while True:
         client_connection, addr = s.accept()
-        thread = threading.Thread(target=handle_client, args=(client_connection, addr))  # Start a thread & connect
+        thread = threading.Thread(target=handle_client, args=(client_connection, addr))
         thread.start()
 
+
 if __name__ == '__main__':
-    Main()
+    main()
 
 
 

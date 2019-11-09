@@ -2,6 +2,7 @@ from socket import *
 import threading
 buffer_size = 2048
 connected = False
+client_name = ""
 
 # Created by Evan Smith on 11/8
 #
@@ -26,7 +27,10 @@ def main():
 def sending_thread(sock, ip_addr):
     try:
         while 1:
-            msg = input()
+            if len(client_name) < 1:
+                msg = input()
+            else:
+                msg = input(client_name + ": ")
             sock.send(msg.encode())
     except:
         global connected
@@ -37,19 +41,22 @@ def sending_thread(sock, ip_addr):
 
 def receiving_thread(sock, ip_addr):
     global connected
+    global client_name
     try:
         while 1:
             msg = sock.recv(buffer_size)
             if len(msg) < 248:
-                if ":" in msg.decode():
-                    print(msg.decode(), end='')
-                elif "FORCE_EXIT" in msg.decode():
+                if "FORCE_EXIT" in msg.decode():
                     connected = False
                     print("Error: Connection terminated by server")
                     exit(1)
+                elif "NOT_CHAT" in msg.decode():
+                    client_name = ""
+                elif "IN_CHAT" in msg.decode():
+                    str_list = msg.decode().split(':')
+                    client_name = str_list[1]
                 else:
                     print(msg.decode())
-
             else:
                 print("Error: message too long")
     except:
