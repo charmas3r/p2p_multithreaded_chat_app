@@ -13,6 +13,7 @@ class UserState(enum.Enum):
     Requesting = 2
     Requested = 3
     Chatting = 4
+    GroupChatting = 5
 
     def __str__(self):
         return '%s' % self.value
@@ -66,6 +67,11 @@ def message_router(message, connection):
                     send_single_user_warning(connection)
                     send_menu(connection)
             elif message.decode() == '3':
+                send_group_chat_header(connection)
+                send_group_chat_welcome(connection)
+                user.state = UserState.GroupChatting
+                user.availability = "In group chat"
+            elif message.decode() == '4':
                 remove_connection(connection)
             else:
                 # error message
@@ -89,8 +95,6 @@ def message_router(message, connection):
             request_user.state = UserState.Chatting
             send_chat_header(request_user, user, connection)
             send_chat_header(user, request_user, request_user.connection)
-            send_chat_signal_to_client(user, connection)
-            send_chat_signal_to_client(request_user, request_user.connection)
         elif message.decode().lower() == 'n':
             # send rejection message to user
             user.state = UserState.Idle
@@ -105,16 +109,64 @@ def message_router(message, connection):
         temp_str_list = user.availability.split()
         other_user = get_user_from_name(temp_str_list[2])
         if message.decode() == "Quit":
-            user.state = UserState.Idle
-            other_user.state = UserState.Idle
-            user.availability = "Available"
-            other_user.availability = "Available"
+            users_available(user, other_user)
             send_chat_end_to_users(user.connection, other_user.connection)
             send_menu(other_user.connection)
             send_menu(user.connection)
         else:
-            formatted_chat_message = "\n" + user.username + ": " + message.decode() + "\n"
+            formatted_chat_message = user.username + ": " + message.decode()
             send_user_to_user_message(user, other_user, formatted_chat_message)
+    elif user.state is UserState.GroupChatting:
+        if message.decode() == 'Quit':
+            exit_user_from_group_chat(user)
+        else:
+            formatted_chat_message = user.username + ": " + message.decode()
+            broadcast_message_for_group_chat(formatted_chat_message, connection, False)
+
+
+def broadcast_message_for_group_chat(message, connection, all_flag):
+    if ":" in message:
+        tmp_list = message.split(':')
+        print(username_from_connection(connection) + " is broadcasting '" + tmp_list[1] + "'")
+    # sends to all except client
+    if not all_flag:
+        for key, value in active_clients.items():
+            if value in database and value is not connection:
+                if database[value].state == UserState.GroupChatting:
+                    value.send(message.encode())
+    # send to all including client
+    else:
+        for key, value in active_clients.items():
+            if value in database:
+                if database[value].state == UserState.GroupChatting:
+                    value.send(message.encode())
+
+
+def send_group_chat_header(connection):
+    print(username_from_connection(connection) + " is entering the group chat")
+    header = "\n\n**** Group Chat ****\n\n"
+    connection.send(header.encode())
+
+
+def send_group_chat_welcome(connection):
+    welcome_message = "\n*** " + username_from_connection(connection) + " has joined the chat ***\n"
+    broadcast_message_for_group_chat(welcome_message, connection, True)
+
+
+def exit_user_from_group_chat(user):
+    print(user.username + " has left the group chat")
+    user.state = UserState.Idle
+    user.availability = "Available"
+    send_menu(user.connection)
+
+
+def users_available(user, other_user):
+    print(user.username + " has become available to chat with")
+    print(other_user + " has become available to chat with")
+    user.state = UserState.Idle
+    other_user.state = UserState.Idle
+    user.availability = "Available"
+    other_user.availability = "Available"
 
 
 def username_from_connection(connection):
@@ -136,21 +188,9 @@ def format_incoming_msg(message):
 
 def send_chat_end_to_users(connection, other_connection):
     print("Exiting chat for " + username_from_connection(connection))
-    send_chat_end_signal_client(connection)
-    send_chat_end_signal_client(other_connection)
     end_message = "chat session ended"
     connection.send(end_message.encode())
     other_connection.send(end_message.encode())
-
-
-def send_chat_signal_to_client(user, connection):
-    signal = "IN_CHAT:" + user.username
-    connection.send(signal.encode())
-
-
-def send_chat_end_signal_client(connection):
-    signal = "NOT_CHAT"
-    connection.send(signal.encode())
 
 
 def send_rejection_message(user, connection):
@@ -170,7 +210,7 @@ def send_welcome(connection):
 
 
 def send_menu(connection):
-    menu = "\n\n1. List users\n2. Chat\n3. Exit\n\nEnter your choice: "
+    menu = "\n\n1. List users\n2. Chat\n3. Group Chat\n4. Exit\n\nEnter your choice: "
     connection.send(menu.encode())
 
 
@@ -201,7 +241,7 @@ def send_user_list(connection):
             temp_user = database[value]
             if key == temp_user.username:
                 user_list += "\t" + temp_user.username + "\t\t" + str(temp_user.availability) \
-                             + "\t" + str(temp_user.address) + "\t\t" + str(temp_user.login_status) + "\n"
+                            + "\t\t" + str(temp_user.login_status) + "\n"
                 connection.send(user_list.encode())
                 print(user_list)
 
@@ -215,12 +255,13 @@ def get_user_from_name(username):
 
 def send_user_list_header(connection):
     user_list_header =  "\n\n------------------------------------------------------------------------------------\n"
-    user_list_header += "\tusername\tavailability\t\taddress\t\tlogin status\t\n"
+    user_list_header += "\tusername\tavailability\t\tlogin status\t\n"
     user_list_header += "------------------------------------------------------------------------------------\n"
     connection.send(user_list_header.encode())
 
 
 def send_user_to_user_message(current_user, requested_user, message):
+    print(current_user.username + " sent message: \n" + message + "\nto " + requested_user.username)
     requested_user.connection.send(message.encode())
 
 
