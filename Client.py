@@ -1,7 +1,6 @@
 from socket import *
 import threading
 buffer_size = 2048
-connected = False
 
 # Created by Evan Smith on 11/8
 #
@@ -41,15 +40,12 @@ def receiving_thread(sock, ip_addr):
         while 1:
             msg = sock.recv(buffer_size)
             if len(msg) < 248:
-                if ":" in msg.decode():
-                    print(msg.decode(), end='')
-                elif "FORCE_EXIT" in msg.decode():
+                if "FORCE_EXIT" in msg.decode():
                     connected = False
                     print("Error: Connection terminated by server")
                     exit(1)
                 else:
                     print(msg.decode())
-
             else:
                 print("Error: message too long")
     except:
