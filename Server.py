@@ -8,6 +8,26 @@ active_clients = {}
 database = {}
 
 
+# Created by Evan Smith on 11/9
+#
+#
+# The high level idea of this server is that it contains
+# all the logic for chat server. All messages are sent
+# from server and client blindly displays them. This means
+# that this server class contains all parsing and options
+# about how messages are shown. The server also keeps
+# track of all the users currently on the chat server
+# and a database of connections and user objects.
+#
+# The server uses a state machine to route messages. A basic
+# example is this. If a user in "Idle" mode he/she can login
+# and see the menu. This means that any message that comes in
+# while the user is in this state will be routed accordingly.
+# This enables more sophisticated logic to be implemented by the
+# server, and helps keep the client code clean of any logic. Finally
+# it also helps show correct "availability" of these users.
+
+
 class UserState(enum.Enum):
     Idle = 1
     Requesting = 2
