@@ -64,7 +64,7 @@ def handle_client(connection, address):
 
 
 def message_router(message, connection):
-    # get user object associated with connection, always true
+    # get user object associated with connection, always will return current user
     user = database[connection]
     if user.state is UserState.Idle:
         if not user.login_status:
