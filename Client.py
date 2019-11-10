@@ -1,9 +1,11 @@
 from socket import *
 import threading
+
 MAX_MSG_SIZE = 248
 BUFFER_SIZE = 2048
 SERVER_HOST = '127.0.0.1'
 SERVER_PORT = 12000
+FORCE_EXIT = "FORCE_EXIT"
 
 # ======================================================
 # Created by Evan Smith on 11/8
@@ -55,7 +57,7 @@ def receiving_thread(sock, ip_addr):
             msg = sock.recv(BUFFER_SIZE)
             if len(msg) < MAX_MSG_SIZE:
                 # special command indicating client should terminate
-                if "FORCE_EXIT" in msg.decode():
+                if FORCE_EXIT in msg.decode():
                     connected = False
                     print("Error: Connection terminated by server")
                     exit(1)
@@ -71,13 +73,11 @@ def receiving_thread(sock, ip_addr):
 
 # Thread initiation and creation.
 def initiate_connection_and_threads():
-    server_name = SERVER_HOST
-    server_port = SERVER_PORT
     client_socket = socket(AF_INET, SOCK_STREAM)
-    client_socket.connect((server_name, server_port))
-    send_thread = threading.Thread(target=sending_thread, args=(client_socket, server_name))
+    client_socket.connect((SERVER_HOST, SERVER_PORT))
+    send_thread = threading.Thread(target=sending_thread, args=(client_socket, SERVER_HOST))
     send_thread.start()
-    recv_thread = threading.Thread(target=receiving_thread, args=(client_socket, server_name))
+    recv_thread = threading.Thread(target=receiving_thread, args=(client_socket, SERVER_HOST))
     recv_thread.start()
     global connected
     connected = True

@@ -2,6 +2,17 @@ import socket
 import threading
 import enum
 
+SHOW_USER_LIST = '1'
+PRIVATE_CHATTING = '2'
+GROUP_CHATTING = '3'
+EXIT = '4'
+QUIT = 'Quit'
+FORCE_EXIT = "FORCE_EXIT"
+SERVER_HOST = '0.0.0.0'
+SERVER_PORT = 12000
+BUFFER_SIZE = 2048
+THREAD_LIMIT = 100
+
 active_clients = {}
 database = {}
 
@@ -60,7 +71,7 @@ def handle_client(connection, address):
     send_welcome(connection)
     try:
         while True:
-            message = connection.recv(1024)
+            message = connection.recv(BUFFER_SIZE)
             message_router(message, connection)
     except:
         pass
@@ -93,13 +104,13 @@ def user_idle_state_func(user, message, connection):
         user.username = message.decode()
         username_validation(user, connection)
     else:
-        if message.decode() == '1':
+        if message.decode() == SHOW_USER_LIST:
             show_user_list(connection)
-        elif message.decode() == '2':
+        elif message.decode() == PRIVATE_CHATTING:
             initiate_private_chat(user, connection)
-        elif message.decode() == '3':
+        elif message.decode() == GROUP_CHATTING:
             initiate_group_chat(user, connection)
-        elif message.decode() == '4':
+        elif message.decode() == EXIT:
             remove_connection(connection)
         else:
             send_general_error(connection)
@@ -109,7 +120,7 @@ def user_idle_state_func(user, message, connection):
 # their messages to all other people in the chat. Their name
 # is prepended to the message. 'Quit' exits the chat.
 def user_group_chatting_state_func(user, message, connection):
-    if message.decode() == 'Quit':
+    if message.decode() == QUIT:
         exit_user_from_group_chat(user)
     else:
         formatted_chat_message = user.username + ": " + message.decode()
@@ -125,7 +136,7 @@ def user_group_chatting_state_func(user, message, connection):
 def user_chatting_state_func(user, message):
     temp_str_list = user.availability.split()
     other_user = get_user_from_name(temp_str_list[2])
-    if message.decode() == "Quit":
+    if message.decode() == QUIT:
         users_available(user, other_user)
         send_chat_end_to_users(user.connection, other_user.connection)
         send_menu(other_user.connection)
@@ -333,7 +344,7 @@ def remove_connection(connection):
                 del database[connection]
                 del active_clients[temp_user.username]
                 print("deleted " + temp_user.username + "'s records from server")
-                message = "FORCE_EXIT"
+                message = FORCE_EXIT
                 connection.send(message.encode())
                 connection.close()
 
@@ -427,11 +438,9 @@ def send_user_to_user_message(current_user, requested_user, message):
 # ======================================================
 
 def main():
-    host = "0.0.0.0"
-    port = 12000
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind((host, port))
-    s.listen(100)
+    s.bind((SERVER_HOST, SERVER_PORT))
+    s.listen(THREAD_LIMIT)
     print("Server initialization is complete. Chat server listening for connections.")
     while True:
         client_connection, addr = s.accept()
