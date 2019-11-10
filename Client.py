@@ -1,6 +1,9 @@
 from socket import *
 import threading
-buffer_size = 2048
+MAX_MSG_SIZE = 248
+BUFFER_SIZE = 2048
+SERVER_HOST = '127.0.0.1'
+SERVER_PORT = 12000
 
 # ======================================================
 # Created by Evan Smith on 11/8
@@ -43,13 +46,14 @@ def sending_thread(sock, ip_addr):
         exit(1)
 
 
-# A single thread is used for receiving messages.
+# A single thread is used for receiving messages. A limit
+# of 248 characters is imposed on the client.
 def receiving_thread(sock, ip_addr):
     global connected
     try:
         while 1:
-            msg = sock.recv(buffer_size)
-            if len(msg) < 248:
+            msg = sock.recv(BUFFER_SIZE)
+            if len(msg) < MAX_MSG_SIZE:
                 # special command indicating client should terminate
                 if "FORCE_EXIT" in msg.decode():
                     connected = False
@@ -67,8 +71,8 @@ def receiving_thread(sock, ip_addr):
 
 # Thread initiation and creation.
 def initiate_connection_and_threads():
-    server_name = '127.0.0.1'
-    server_port = 12000
+    server_name = SERVER_HOST
+    server_port = SERVER_PORT
     client_socket = socket(AF_INET, SOCK_STREAM)
     client_socket.connect((server_name, server_port))
     send_thread = threading.Thread(target=sending_thread, args=(client_socket, server_name))
