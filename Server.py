@@ -301,7 +301,7 @@ def get_user_from_name(username):
 # message to an available state
 def users_available(user, other_user):
     print(user.username + " has become available to chat with")
-    print(other_user + " has become available to chat with")
+    print(other_user.username + " has become available to chat with")
     user.state = UserState.Idle
     other_user.state = UserState.Idle
     user.availability = "Available"
