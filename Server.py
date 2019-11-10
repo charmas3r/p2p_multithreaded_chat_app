@@ -25,6 +25,8 @@ database = {}
 # it also helps show correct "availability" of these users.
 
 
+# Enum class represents states the user can be in during the chat app.
+# Messages are routed based on this state.
 class UserState(enum.Enum):
     Idle = 1
     Requesting = 2
@@ -36,6 +38,7 @@ class UserState(enum.Enum):
         return '%s' % self.value
 
 
+# User class which represents has some basic attributes
 class User:
     def __init__(self, username, availability, connection, address, login_status, state):
         self.username = username
@@ -46,6 +49,9 @@ class User:
         self.state = state
 
 
+# This function receives the messages. Messages are received in an endless loop
+# and then sent to the message router for logic parsing. Upon connection, a
+# user object is created for each connecting thread and a welcome message sent
 def handle_client(connection, address):
     print("%s:%s has connected" % address)
     database[connection] = User("this", "available", connection, address, False, UserState.Idle)
@@ -60,8 +66,11 @@ def handle_client(connection, address):
         connection.close()
 
 
+# This is the main routing mechanism for the application. First, a user object
+# is created based on the connection and based on the state of that user
+# object, the message is routed appropriately.
 def message_router(message, connection):
-    # get user object associated with connection, always will return current user
+    # since thread is alive a user object will always will return current user
     user = database[connection]
     if user.state is UserState.Requesting:
         user_requesting_state_func(user, message, connection)
@@ -70,11 +79,13 @@ def message_router(message, connection):
     elif user.state is UserState.Chatting:
         user_chatting_state_func(user, message)
     elif user.state is UserState.GroupChatting:
-        user_group_chatting_state_fun(user, message, connection)
+        user_group_chatting_state_func(user, message, connection)
     else:
         user_idle_state_func(user, message, connection)
 
 
+# Handles all "idling" functionality which includes authentication
+# and menu routing.
 def user_idle_state_func(user, message, connection):
     if not user.login_status:
         user.username = message.decode()
@@ -92,7 +103,10 @@ def user_idle_state_func(user, message, connection):
             send_general_error(connection)
 
 
-def user_group_chatting_state_fun(user, message, connection):
+# Basic group chatting state. Users in a group chat broadcast
+# their messages to all other people in the chat. Their name
+# is prepended to the message. 'Quit' exits the chat.
+def user_group_chatting_state_func(user, message, connection):
     if message.decode() == 'Quit':
         exit_user_from_group_chat(user)
     else:
@@ -100,6 +114,12 @@ def user_group_chatting_state_fun(user, message, connection):
         broadcast_message_for_group_chat(formatted_chat_message, connection, False)
 
 
+# Private chatting state. Users in a private chat send their
+# message to one other person (who has previously accepted the request).
+# For this implementation, the other user's username is stored in the
+# 'availability' field of the user. In future implementation it should
+# be stored as a seperate variable. The sender's name is prepended to
+# the chat and.
 def user_chatting_state_func(user, message):
     temp_str_list = user.availability.split()
     other_user = get_user_from_name(temp_str_list[2])
@@ -113,6 +133,9 @@ def user_chatting_state_func(user, message):
         send_user_to_user_message(user, other_user, formatted_chat_message)
 
 
+# Requested state function. This state represents the user state when
+# requested to chat from another user. In this state, the user can
+# choose to either
 def user_requested_state_func(user, message, connection):
     temp_str_list = user.availability.split()
     request_user = get_user_from_name(temp_str_list[2])
@@ -132,7 +155,6 @@ def user_requested_state_func(user, message, connection):
     else:
         # error message
         send_general_error(connection)
-
 
 
 def user_requesting_state_func(user, message, connection):
