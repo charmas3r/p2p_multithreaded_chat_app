@@ -69,4 +69,3 @@ def initiate_connection_and_threads():
 
 if __name__ == "__main__":
     main()
-
