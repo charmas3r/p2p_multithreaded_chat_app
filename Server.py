@@ -8,6 +8,26 @@ active_clients = {}
 database = {}
 
 
+# Created by Evan Smith on 11/9
+#
+#
+# The high level idea of this server is that it contains
+# all the logic for chat server. All messages are sent
+# from server and client blindly displays them. This means
+# that this server class contains all parsing and options
+# about how messages are shown. The server also keeps
+# track of all the users currently on the chat server
+# and a database of connections and user objects.
+#
+# The server uses a state machine to route messages. A basic
+# example is this. If a user in "Idle" mode he/she can login
+# and see the menu. This means that any message that comes in
+# while the user is in this state will be routed accordingly.
+# This enables more sophisticated logic to be implemented by the
+# server, and helps keep the client code clean of any logic. Finally
+# it also helps show correct "availability" of these users.
+
+
 class UserState(enum.Enum):
     Idle = 1
     Requesting = 2
@@ -51,56 +71,17 @@ def message_router(message, connection):
             username_validation(user, connection)
         else:
             if message.decode() == '1':
-                if len(active_clients) > 1:
-                    send_user_list(connection)
-                    send_menu(connection)
-                else:
-                    send_single_user_warning(connection)
-                    send_menu(connection)
+                show_list_users(connection)
             elif message.decode() == '2':
-                if len(database) > 1:
-                    user.state = UserState.Requesting
-                    send_user_list(connection)
-                    send_chat_request(connection)
-                else:
-                    send_single_user_warning(connection)
-                    send_menu(connection)
+                initiate_private_chat(user, connection)
             elif message.decode() == '3':
                 remove_connection(connection)
             else:
-                # add error message here
                 print("Error, invalid operation")
     elif user.state is UserState.Requesting:
-        # current user in a state where they are requesting to chat with another user
-        requested_user = get_user_from_name(message.decode())
-        # turn off availability
-        user.availability = "chatting with " + requested_user.username
-        requested_user.availability = "chatting with " + user.username
-        requested_user.state = UserState.Requested
-        send_request_waiting(requested_user, connection)
-        request_message = "\nUser " + user.username + " is requesting to chat with you. Y/N?"
-        send_user_to_user_message(user, requested_user, request_message)
+        user_in_requesting_state(user, message, connection)
     elif user.state is UserState.Requested:
-        temp_str_list = user.availability.split()
-        request_user = get_user_from_name(temp_str_list[2])
-        if message.decode().lower() == 'y':
-            # formally begin chatting
-            user.state = UserState.Chatting
-            request_user.state = UserState.Chatting
-            send_chat_header(user, connection)
-            send_chat_header(request_user, request_user.connection)
-            send_chat_prefix(user, connection)
-            send_chat_prefix(request_user, request_user.connection)
-        elif message.decode().lower() == 'n':
-            # send rejection message to user
-            user.state = UserState.Idle
-            request_user.state = UserState.Idle
-            send_rejection_message(user, request_user.connection)
-            send_menu(request_user.connection)
-            send_menu(connection)
-        else:
-            # error message
-            print("user error...")
+        user_in_requested_state(user, message, connection)
     elif user.state is UserState.Chatting:
         temp_str_list = user.availability.split()
         other_user = get_user_from_name(temp_str_list[2])
@@ -114,6 +95,58 @@ def message_router(message, connection):
             formatted_chat_message = other_user.username + ": " + message.decode() + "\n" + user.username + ": \n"
             send_user_to_user_message(user, other_user, formatted_chat_message)
 
+
+def user_in_requested_state(user, message, connection):
+    temp_str_list = user.availability.split()
+    request_user = get_user_from_name(temp_str_list[2])
+    if message.decode().lower() == 'y':
+        # formally begin chatting
+        user.state = UserState.Chatting
+        request_user.state = UserState.Chatting
+        send_chat_header(user, connection)
+        send_chat_header(request_user, request_user.connection)
+        send_chat_prefix(user, connection)
+        send_chat_prefix(request_user, request_user.connection)
+    elif message.decode().lower() == 'n':
+        # send rejection message to user
+        user.state = UserState.Idle
+        request_user.state = UserState.Idle
+        send_rejection_message(user, request_user.connection)
+        send_menu(request_user.connection)
+        send_menu(connection)
+    else:
+        print("user error...")
+
+
+def user_in_requesting_state(user, message, connection):
+    # current user in a state where they are requesting to chat with another user
+    requested_user = get_user_from_name(message.decode())
+    # turn off availability
+    user.availability = "chatting with " + requested_user.username
+    requested_user.availability = "chatting with " + user.username
+    requested_user.state = UserState.Requested
+    send_request_waiting(requested_user, connection)
+    request_message = "\nUser " + user.username + " is requesting to chat with you. Y/N?"
+    send_user_to_user_message(user, requested_user, request_message)
+
+
+def show_list_users(connection):
+    if len(active_clients) > 1:
+        send_user_list(connection)
+        send_menu(connection)
+    else:
+        send_single_user_warning(connection)
+        send_menu(connection)
+
+
+def initiate_private_chat(user, connection):
+    if len(database) > 1:
+        user.state = UserState.Requesting
+        send_user_list(connection)
+        send_chat_request(connection)
+    else:
+        send_single_user_warning(connection)
+        send_menu(connection)
 
 
 def send_chat_end_to_users(connection, other_connection):
